@@ -1,0 +1,67 @@
+{
+  "name": "bun-user-modules",
+  "version": "2.0.0",
+  "description": "Enterprise-grade system interaction APIs for Bun runtime - A comprehensive toolkit with advanced utilities, performance monitoring, and production-ready features",
+  "main": "index.ts",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "build": "bun build index.ts --outdir=dist --minify --target=bun",
+    "build:types": "bunx tsc --emitDeclarationOnly --outDir dist",
+    "build:prod": "bun run build && bun run build:types",
+    "check": "bunx tsc --noEmit",
+    "lint": "bunx tsc --noEmit",
+    "dev": "bun run index.ts",
+    "clean": "rm -rf dist coverage .cache",
+    "prepublish": "bun run clean && bun run test && bun run build:prod"
+  },
+  "keywords": [
+    "bun",
+    "javascript",
+    "typescript",
+    "runtime",
+    "system-apis",
+    "utilities",
+    "filesystem",
+    "clipboard",
+    "networking",
+    "os-operations",
+    "performance-monitoring",
+    "circuit-breaker",
+    "validation",
+    "enterprise",
+    "production-ready"
+  ],
+  "author": "Developer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/user/bun-user-modules.git"
+  },
+  "bugs": {
+    "url": "https://github.com/user/bun-user-modules/issues"
+  },
+  "homepage": "https://github.com/user/bun-user-modules#readme",
+  "files": [
+    "dist/",
+    "modules/",
+    "types.ts",
+    "index.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.0.0",
+    "node": ">=18.0.0"
+  }
+}

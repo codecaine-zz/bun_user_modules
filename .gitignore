@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build outputs
+out/
+dist/
+build/
+*.tgz
+
+# Code coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+debug-logs-*.json
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Caches
+.eslintcache
+.cache/
+*.tsbuildinfo
+.nyc_output/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Development files
+test_*.ts
+*_test_*.ts
+*.development.*
+*.dev.*
+
+# Backup files
+*.bak
+*.backup
+*_backup.*
+*_old.*
+README_*.md
+
+# Generated documentation
+docs/build/
+docs/dist/
