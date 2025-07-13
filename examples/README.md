@@ -31,7 +31,7 @@ bun run examples/network-example.ts
 # OS Module - Operating system commands
 bun run examples/os-example.ts
 
-# Storage Module - Local data storage
+# Storage Module - Local data storage and security
 bun run examples/storage-example.ts
 
 # Utils Module - Comprehensive utilities
@@ -111,14 +111,24 @@ bun run examples/run-all.ts
 - Cross-platform compatibility
 
 ### 💾 Storage Module (`storage-example.ts`)
-- Key-value data storage
-- JSON serialization
-- Namespaced storage
-- Import/export capabilities
-- Storage statistics
-- Data persistence
+
+- **Basic Operations**: Key-value data storage with JSON serialization
+- **Namespaced Storage**: Isolated storage contexts for different app sections
+- **Import/Export**: Bulk data operations and backup capabilities
+- **Storage Statistics**: Monitoring storage usage and performance
+- **🔐 Encrypted Storage**: Secure data storage with XOR encryption
+- **⏰ TTL Storage**: Time-limited storage for temporary sensitive data
+- **📚 Versioned Storage**: Audit trails and change history tracking
+- **👁️ Observable Storage**: Real-time monitoring and security alerts
+- **✅ Data Validation**: Input sanitization and schema validation
+- **🔐 Access Control**: Role-based data access patterns
+- **📊 Security Audit**: Activity logging and suspicious behavior detection
+- **🎫 Session Management**: Secure session creation and validation
+- **🔄 Key Rotation**: Encryption key management and rotation
+- **💾 Backup & Migration**: Automated backups and data migration tools
 
 ### 🛠️ Utils Module (`utils-example.ts`)
+
 - Weighted array operations
 - Mathematical utilities
 - String manipulation
