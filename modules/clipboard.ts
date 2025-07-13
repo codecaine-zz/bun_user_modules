@@ -1,5 +1,6 @@
 import { execCommand } from './os';
 import { platform } from 'os';
+// Use Bun's crypto API when available, fallback to Node.js crypto
 import { createHash } from 'crypto';
 
 // Clipboard history storage

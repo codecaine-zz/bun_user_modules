@@ -1,3 +1,4 @@
+// Use Bun's optimized process APIs where available
 import { spawn, exec, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { homedir, tmpdir, platform, arch, hostname, uptime, freemem, totalmem, cpus, networkInterfaces, userInfo, loadavg } from 'os';
@@ -26,7 +27,7 @@ let processId = 0;
 const eventListeners = new Map<string, EventListener[]>();
 
 /**
- * Executes a command and returns the output
+ * Executes a command and returns the output using Bun's optimized process APIs
  */
 export async function execCommand(
   command: string, 
@@ -41,6 +42,57 @@ export async function execCommand(
   try {
     const { background = false, cwd, envs, timeout = 30000 } = options;
     
+    // Use Bun's process spawning when available
+    if (typeof Bun !== 'undefined' && Bun.spawn) {
+      if (background) {
+        // Execute in background using Bun.spawn
+        const proc = Bun.spawn(['sh', '-c', command], {
+          cwd,
+          env: { ...process.env, ...envs },
+          stdout: 'ignore',
+          stderr: 'ignore',
+          stdin: 'ignore'
+        });
+        
+        return {
+          pid: proc.pid || 0,
+          stdOut: '',
+          stdErr: '',
+          exitCode: 0,
+          success: true
+        };
+      }
+      
+      // Use Bun.spawn for better performance
+      const proc = Bun.spawn(['sh', '-c', command], {
+        cwd,
+        env: { ...process.env, ...envs },
+        stdout: 'pipe',
+        stderr: 'pipe',
+        stdin: options.stdIn ? 'pipe' : 'ignore'
+      });
+      
+      if (options.stdIn && proc.stdin) {
+        // Write to stdin if provided
+        proc.stdin.write(options.stdIn);
+        proc.stdin.end();
+      }
+      
+      const stdout = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      
+      const exitCode = await proc.exited;
+      
+      return {
+        pid: proc.pid || 0,
+        stdOut: stdout,
+        stdErr: stderr,
+        exitCode,
+        success: exitCode === 0
+      };
+    }
+    
+    // Fallback to Node.js child_process
     if (background) {
       // Execute in background and return immediately
       const child = spawn('sh', ['-c', command], {

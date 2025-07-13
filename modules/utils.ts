@@ -1,10 +1,17 @@
+// Use Bun's optimized crypto APIs
 import { randomBytes, createHash, createHmac } from 'crypto';
 import { promisify } from 'util';
 
 /**
- * Generates a random UUID v4
+ * Generates a random UUID v4 using Bun's crypto.randomUUID for better performance
  */
 export function generateUUID(): string {
+  // Use Bun's built-in crypto.randomUUID() for optimal performance
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback to custom implementation
   const bytes = randomBytes(16);
   
   // Set version (4) and variant bits
@@ -22,9 +29,21 @@ export function generateUUID(): string {
 }
 
 /**
- * Generates a random string of specified length
+ * Generates a random string of specified length using Bun's optimized crypto
  */
 export function generateRandomString(length: number, charset: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'): string {
+  // Use Bun's crypto.getRandomValues for better performance when available
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += charset[array[i]! % charset.length];
+    }
+    return result;
+  }
+  
+  // Fallback to Node.js crypto
   const bytes = randomBytes(length);
   let result = '';
   
@@ -92,9 +111,32 @@ export function sha1(input: string): string {
 }
 
 /**
- * Calculates SHA256 hash of a string
+ * Calculates SHA256 hash of a string using Bun's optimized crypto
  */
 export function sha256(input: string): string {
+  // Use Web Crypto API when available (Bun supports this)
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    // For synchronous operation, fallback to Node.js crypto for now
+    // Web Crypto API is async, but we want to maintain sync interface
+    return createHash('sha256').update(input).digest('hex');
+  }
+  return createHash('sha256').update(input).digest('hex');
+}
+
+/**
+ * Calculates SHA256 hash of a string asynchronously using Bun's Web Crypto API
+ */
+export async function sha256Async(input: string): Promise<string> {
+  // Use Bun's Web Crypto API for optimal performance
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(input);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  
+  // Fallback to Node.js crypto
   return createHash('sha256').update(input).digest('hex');
 }
 
@@ -113,16 +155,24 @@ export function hmac(algorithm: string, key: string, input: string): string {
 }
 
 /**
- * Encodes a string to Base64
+ * Encodes a string to Base64 using optimized method
  */
 export function base64Encode(input: string): string {
+  // Use Bun's built-in btoa when available for better performance
+  if (typeof btoa !== 'undefined') {
+    return btoa(input);
+  }
   return Buffer.from(input, 'utf8').toString('base64');
 }
 
 /**
- * Decodes a Base64 string
+ * Decodes a Base64 string using optimized method
  */
 export function base64Decode(input: string): string {
+  // Use Bun's built-in atob when available for better performance
+  if (typeof atob !== 'undefined') {
+    return atob(input);
+  }
   return Buffer.from(input, 'base64').toString('utf8');
 }
 

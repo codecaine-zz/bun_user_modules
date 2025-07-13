@@ -1,3 +1,4 @@
+// Use Bun's optimized APIs where available
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
@@ -5,6 +6,21 @@ import * as os from 'os';
 import type { AppConfig, CommandResult } from '../types';
 
 const execAsync = promisify(exec);
+
+// Helper function to execute commands using Bun when available
+async function execCommand(command: string): Promise<void> {
+  if (typeof Bun !== 'undefined' && Bun.spawn) {
+    // Use Bun's spawn for better performance
+    const proc = Bun.spawn(['sh', '-c', command], {
+      stdout: 'ignore',
+      stderr: 'ignore'
+    });
+    await proc.exited;
+  } else {
+    // Fallback to Node.js exec
+    await execAsync(command);
+  }
+}
 
 // Global app configuration
 let appConfig: AppConfig = {
@@ -203,18 +219,18 @@ export async function showNotification(title: string, body: string, options?: {
     if (platform === 'darwin') {
       // macOS
       const script = `display notification "${body}" with title "${title}"`;
-      await execAsync(`osascript -e '${script}'`);
+      await execCommand(`osascript -e '${script}'`);
     } else if (platform === 'win32') {
       // Windows - using PowerShell
       const script = `[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Windows.Forms.MessageBox]::Show('${body}', '${title}')`;
-      await execAsync(`powershell -Command "${script}"`);
+      await execCommand(`powershell -Command "${script}"`);
     } else {
       // Linux - using notify-send
       const timeout = options?.timeout ? `-t ${options.timeout}` : '';
       const urgency = options?.urgency ? `-u ${options.urgency}` : '';
       const icon = options?.icon ? `-i "${options.icon}"` : '';
       
-      await execAsync(`notify-send ${timeout} ${urgency} ${icon} "${title}" "${body}"`);
+      await execCommand(`notify-send ${timeout} ${urgency} ${icon} "${title}" "${body}"`);
     }
   } catch (err) {
     console.warn('Failed to show notification:', err);
@@ -222,18 +238,18 @@ export async function showNotification(title: string, body: string, options?: {
 }
 
 /**
- * Opens a URL in the default browser
+ * Opens a URL in the default browser using optimized command execution
  */
 export async function openUrl(url: string): Promise<void> {
   const platform = process.platform;
   
   try {
     if (platform === 'darwin') {
-      await execAsync(`open "${url}"`);
+      await execCommand(`open "${url}"`);
     } else if (platform === 'win32') {
-      await execAsync(`start "" "${url}"`);
+      await execCommand(`start "" "${url}"`);
     } else {
-      await execAsync(`xdg-open "${url}"`);
+      await execCommand(`xdg-open "${url}"`);
     }
   } catch (err) {
     throw new Error(`Failed to open URL: ${err}`);
@@ -241,18 +257,18 @@ export async function openUrl(url: string): Promise<void> {
 }
 
 /**
- * Opens a file or directory in the default application
+ * Opens a file or directory in the default application using optimized command execution
  */
 export async function openPath(filePath: string): Promise<void> {
   const platform = process.platform;
   
   try {
     if (platform === 'darwin') {
-      await execAsync(`open "${filePath}"`);
+      await execCommand(`open "${filePath}"`);
     } else if (platform === 'win32') {
-      await execAsync(`start "" "${filePath}"`);
+      await execCommand(`start "" "${filePath}"`);
     } else {
-      await execAsync(`xdg-open "${filePath}"`);
+      await execCommand(`xdg-open "${filePath}"`);
     }
   } catch (err) {
     throw new Error(`Failed to open path: ${err}`);

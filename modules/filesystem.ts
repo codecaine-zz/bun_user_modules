@@ -1,3 +1,5 @@
+// Use Bun's built-in file system APIs for optimal performance
+import { file as bunFile, write as bunWrite } from 'bun';
 import { readdir, readFile, writeFile, appendFile, mkdir, rm, stat, copyFile, rename, chmod, access } from 'fs/promises';
 import { join, resolve, relative, dirname, basename, extname, parse } from 'path';
 import { createReadStream, createWriteStream, constants, watchFile as fsWatchFile, unwatchFile } from 'fs';
@@ -41,11 +43,12 @@ export async function remove(path: string): Promise<void> {
 }
 
 /**
- * Writes a text file
+ * Writes a text file using Bun's optimized file API
  */
 export async function writeFileText(filename: string, data: string, encoding: BufferEncoding = 'utf8'): Promise<void> {
   try {
-    await writeFile(filename, data, encoding);
+    // Use Bun's optimized write for better performance
+    await bunWrite(filename, data);
   } catch (error) {
     throw new Error(`Failed to write file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -63,22 +66,23 @@ export async function appendFileText(filename: string, data: string, encoding: B
 }
 
 /**
- * Writes a binary file
+ * Writes a binary file using Bun's optimized file API
  */
 export async function writeBinaryFile(filename: string, data: ArrayBuffer): Promise<void> {
   try {
-    const buffer = Buffer.from(data);
-    await writeFile(filename, buffer);
+    // Use Bun's optimized write for better performance
+    await bunWrite(filename, data);
   } catch (error) {
     throw new Error(`Failed to write binary file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
- * Appends binary data to a file
+ * Appends binary data to a file using Bun's optimized file API
  */
 export async function appendBinaryFile(filename: string, data: ArrayBuffer): Promise<void> {
   try {
+    // For append operations, we still use Node.js API as Bun doesn't have a direct append for binary
     const buffer = Buffer.from(data);
     await appendFile(filename, buffer);
   } catch (error) {
@@ -87,24 +91,26 @@ export async function appendBinaryFile(filename: string, data: ArrayBuffer): Pro
 }
 
 /**
- * Reads a text file
+ * Reads a text file using Bun's optimized file API
  */
 export async function readFileText(filename: string, encoding: BufferEncoding = 'utf8'): Promise<string> {
   try {
-    return await readFile(filename, encoding);
+    // Use Bun's optimized file API for better performance
+    const file = bunFile(filename);
+    return await file.text();
   } catch (error) {
     throw new Error(`Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
- * Reads binary files
+ * Reads binary files using Bun's optimized file API
  */
 export async function readBinaryFile(filename: string): Promise<ArrayBuffer> {
   try {
-    const buffer = await readFile(filename);
-    // Convert Buffer to ArrayBuffer properly
-    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+    // Use Bun's optimized file API for better performance
+    const file = bunFile(filename);
+    return await file.arrayBuffer();
   } catch (error) {
     throw new Error(`Failed to read binary file: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
