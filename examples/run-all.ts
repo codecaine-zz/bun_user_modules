@@ -118,9 +118,6 @@ class ExampleRunner {
     const startTime = Date.now();
 
     try {
-      // Note: In a real implementation, you would dynamically import and run the example
-      // For demonstration purposes, we'll simulate running the example
-      
       if (verbose) {
         console.log(`📝 Description: ${example.description}`);
         console.log(`🎯 Difficulty: ${example.difficulty}`);
@@ -131,14 +128,33 @@ class ExampleRunner {
         console.log(`\n🔄 Executing: ${example.file}...`);
       }
 
-      // Simulate example execution with realistic timing
-      const simulatedDuration = this.getSimulatedDuration(example.difficulty);
-      await new Promise(resolve => setTimeout(resolve, simulatedDuration));
+      // Create a promise that will timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Example timed out after ${timeoutMs}ms`)), timeoutMs);
+      });
 
-      // Simulate occasional failures for demonstration
-      if (Math.random() < 0.1) { // 10% failure rate for demo
-        throw new Error(`Simulated error in ${example.name}`);
-      }
+      // Import and run the actual example
+      const examplePath = `./${example.file}`;
+      
+      // Run the example using Bun's subprocess to capture output and errors
+      const execPromise = new Promise<void>((resolve, reject) => {
+        const proc = Bun.spawn(['bun', 'run', examplePath], {
+          cwd: import.meta.dir,
+          stdout: 'pipe',
+          stderr: 'pipe',
+        });
+
+        proc.exited.then((exitCode) => {
+          if (exitCode === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Example exited with code ${exitCode}`));
+          }
+        }).catch(reject);
+      });
+
+      // Race between execution and timeout
+      await Promise.race([execPromise, timeoutPromise]);
 
       const duration = Date.now() - startTime;
       return {
@@ -156,14 +172,6 @@ class ExampleRunner {
         duration,
         error: error as Error
       };
-    }
-  }
-
-  private getSimulatedDuration(difficulty: Example['difficulty']): number {
-    switch (difficulty) {
-      case 'Beginner': return Math.random() * 1000 + 500; // 0.5-1.5s
-      case 'Intermediate': return Math.random() * 2000 + 1000; // 1-3s
-      case 'Advanced': return Math.random() * 3000 + 2000; // 2-5s
     }
   }
 
