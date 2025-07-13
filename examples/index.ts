@@ -7,6 +7,7 @@
 console.log('🚀 Bun User Modules - Examples Collection\n');
 
 const examples = [
+  { name: 'Enhanced File Watching (NEW!)', file: './enhanced-watching-example.ts', description: 'Advanced directory monitoring with real-time events and filtering' },
   { name: 'App Module', file: './app-example.ts', description: 'Application configuration and process management' },
   { name: 'Clipboard Module', file: './clipboard-example.ts', description: 'Clipboard operations and text management' },
   { name: 'Computer Module', file: './computer-example.ts', description: 'System monitoring and hardware information' },

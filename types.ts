@@ -57,6 +57,43 @@ export interface WatchEvent {
   filename?: string;
 }
 
+export interface EnhancedWatchEvent {
+  path: string;
+  event: 'create' | 'modify' | 'delete' | 'rename' | 'access' | 'attrib';
+  filename: string;
+  timestamp: Date;
+  isDirectory: boolean;
+  size?: number;
+  previousSize?: number;
+  stats?: FileStats;
+  previousStats?: FileStats;
+}
+
+export interface WatcherConfig {
+  recursive?: boolean;
+  ignorePatterns?: (string | RegExp)[];
+  includePatterns?: (string | RegExp)[];
+  debounceMs?: number;
+  events?: ('create' | 'modify' | 'delete' | 'rename' | 'access' | 'attrib')[];
+  persistent?: boolean;
+  followSymlinks?: boolean;
+  maxDepth?: number;
+}
+
+export interface DirectoryWatcher {
+  id: number;
+  path: string;
+  config: WatcherConfig;
+  active: boolean;
+  eventCount: number;
+  lastEvent?: Date;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  on(event: 'change', callback: (event: EnhancedWatchEvent) => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+  off(event: 'change' | 'error', callback: Function): void;
+}
+
 export interface CommandResult {
   pid: number;
   stdOut: string;

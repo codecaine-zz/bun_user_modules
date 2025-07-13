@@ -17,6 +17,39 @@
 - 🏢 **Enterprise Features**: Backup/restore, versioning, migration utilities
 - 🧮 **Enhanced Utils**: Weighted arrays, advanced math, date/string manipulation, object utilities
 
+## 🚀 Latest Feature: Enhanced File Watching
+
+**NEW!** Advanced directory monitoring with real-time event handling and intelligent filtering:
+
+- 🔍 **Real-time monitoring** with configurable event types (create, modify, delete, rename)
+- 🎯 **Pattern-based filtering** with include/exclude patterns and regex support
+- ⚡ **Event debouncing** to reduce noise and improve performance
+- 📁 **Recursive directory monitoring** with customizable depth limits
+- 🎛️ **Multiple event listeners** per watcher with dynamic management
+- 🚀 **Performance optimized** using native `fs.watch` API
+
+```typescript
+import { createDirectoryWatcher } from './modules/filesystem.js';
+
+// Create enhanced watcher with filtering
+const watcher = createDirectoryWatcher('./src', {
+  recursive: true,
+  events: ['create', 'modify', 'delete'],
+  includePatterns: [/\.(ts|js)$/],
+  ignorePatterns: ['node_modules', /\.tmp$/],
+  debounceMs: 100,
+  maxDepth: 5
+});
+
+// Handle file system events
+watcher.on('change', (event) => {
+  console.log(`${event.event}: ${event.filename}`);
+  console.log(`Size: ${event.size} bytes, Modified: ${event.timestamp}`);
+});
+
+await watcher.start();
+```
+
 ## 🌟 Core Features
 
 ### **📋 Enhanced Clipboard Module**

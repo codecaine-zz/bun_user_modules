@@ -2,7 +2,7 @@
 import { file as bunFile, write as bunWrite } from 'bun';
 import { readdir, readFile, writeFile, appendFile, mkdir, rm, stat, copyFile, rename, chmod, access } from 'fs/promises';
 import { join, resolve, relative, dirname, basename, extname, parse } from 'path';
-import { createReadStream, createWriteStream, constants, watchFile as fsWatchFile, unwatchFile } from 'fs';
+import { createReadStream, createWriteStream, constants, watchFile as fsWatchFile, unwatchFile, watch } from 'fs';
 import type { 
   DirectoryEntry, 
   FileStats, 
@@ -10,15 +10,25 @@ import type {
   PathParts, 
   FileWatcher, 
   WatchEvent, 
-  EventListener 
+  EventListener,
+  EnhancedWatchEvent,
+  WatcherConfig,
+  DirectoryWatcher
 } from '../types';
 
 // File watchers storage
 const watchers = new Map<number, { cleanup: () => void; path: string }>();
 let watcherId = 0;
 
+// Enhanced directory watchers storage
+const directoryWatchers = new Map<number, DirectoryWatcher>();
+let directoryWatcherId = 0;
+
 // Event emitter for file system events
 const eventListeners = new Map<string, EventListener[]>();
+
+// Debounce utility for enhanced watchers
+const debounceMap = new Map<string, NodeJS.Timeout>();
 
 /**
  * Creates a directory or multiple directories recursively
@@ -409,6 +419,316 @@ export function getWatchers(): FileWatcher[] {
     path,
     active: true
   }));
+}
+
+/**
+ * Enhanced Directory Watcher Class
+ */
+class EnhancedDirectoryWatcher implements DirectoryWatcher {
+  public id: number;
+  public path: string;
+  public config: WatcherConfig;
+  public active: boolean = false;
+  public eventCount: number = 0;
+  public lastEvent?: Date;
+
+  private watcher: any = null;
+  private listeners = new Map<string, Set<Function>>();
+  private fileStatsCache = new Map<string, FileStats>();
+
+  constructor(id: number, path: string, config: WatcherConfig) {
+    this.id = id;
+    this.path = path;
+    this.config = {
+      recursive: true,
+      debounceMs: 100,
+      events: ['create', 'modify', 'delete', 'rename'],
+      persistent: true,
+      followSymlinks: false,
+      maxDepth: Infinity,
+      ...config
+    };
+  }
+
+  async start(): Promise<void> {
+    if (this.active) return;
+
+    try {
+      // Initialize file stats cache for existing files
+      await this.initializeStatsCache();
+
+      // Use fs.watch for better performance on directories
+      this.watcher = watch(this.path, { recursive: this.config.recursive }, (eventType, filename) => {
+        if (filename) {
+          this.handleRawEvent(eventType, filename);
+        }
+      });
+
+      this.watcher.on('error', (error: Error) => {
+        this.emit('error', error);
+      });
+
+      this.active = true;
+    } catch (error) {
+      throw new Error(`Failed to start enhanced watcher: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async stop(): Promise<void> {
+    if (!this.active) return;
+
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = null;
+    }
+
+    // Clear debounce timers
+    for (const timer of debounceMap.values()) {
+      clearTimeout(timer);
+    }
+
+    this.active = false;
+    this.fileStatsCache.clear();
+  }
+
+  on(event: 'change', callback: (event: EnhancedWatchEvent) => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+  on(event: string, callback: Function): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(callback);
+  }
+
+  off(event: 'change' | 'error', callback: Function): void {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.delete(callback);
+    }
+  }
+
+  private emit(event: string, data: any): void {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error('Error in watcher callback:', error);
+        }
+      });
+    }
+  }
+
+  private async initializeStatsCache(): Promise<void> {
+    if (!this.config.recursive) {
+      return;
+    }
+
+    try {
+      const entries = await readDirectory(this.path, { recursive: true });
+      for (const entry of entries) {
+        try {
+          if (entry.type === 'FILE') {
+            const stats = await getStats(entry.path);
+            this.fileStatsCache.set(entry.path, stats);
+          }
+        } catch {
+          // Skip files we can't stat
+        }
+      }
+    } catch {
+      // Skip if we can't read directory
+    }
+  }
+
+  private handleRawEvent(eventType: string, filename: string): void {
+    const fullPath = join(this.path, filename);
+    const debounceKey = `${this.id}-${fullPath}`;
+
+    // Clear existing debounce timer
+    const existingTimer = debounceMap.get(debounceKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new debounce timer
+    const timer = setTimeout(async () => {
+      try {
+        await this.processEvent(eventType, fullPath);
+        debounceMap.delete(debounceKey);
+      } catch (error) {
+        this.emit('error', error instanceof Error ? error : new Error('Unknown error'));
+      }
+    }, this.config.debounceMs);
+
+    debounceMap.set(debounceKey, timer);
+  }
+
+  private async processEvent(eventType: string, filePath: string): Promise<void> {
+    // Check if file matches patterns
+    if (!this.shouldIncludeFile(filePath)) {
+      return;
+    }
+
+    // Map raw event types to our enhanced event types
+    let mappedEvent: EnhancedWatchEvent['event'];
+    
+    switch (eventType) {
+      case 'rename':
+        // Check if file still exists to determine if it's create or delete
+        const fileExists = await exists(filePath);
+        mappedEvent = fileExists ? 'create' : 'delete';
+        break;
+      case 'change':
+        mappedEvent = 'modify';
+        break;
+      default:
+        mappedEvent = 'modify';
+    }
+
+    // Filter by configured events
+    if (!this.config.events!.includes(mappedEvent)) {
+      return;
+    }
+
+    try {
+      let currentStats: FileStats | undefined;
+      let isDirectory = false;
+
+      if (mappedEvent !== 'delete') {
+        try {
+          currentStats = await getStats(filePath);
+          isDirectory = currentStats.isDirectory;
+        } catch {
+          // File might have been deleted between checks
+          mappedEvent = 'delete';
+        }
+      }
+
+      const previousStats = this.fileStatsCache.get(filePath);
+      const filename = basename(filePath);
+
+      const enhancedEvent: EnhancedWatchEvent = {
+        path: filePath,
+        event: mappedEvent,
+        filename,
+        timestamp: new Date(),
+        isDirectory,
+        size: currentStats?.size,
+        previousSize: previousStats?.size,
+        stats: currentStats,
+        previousStats
+      };
+
+      // Update cache
+      if (mappedEvent === 'delete') {
+        this.fileStatsCache.delete(filePath);
+      } else if (currentStats) {
+        this.fileStatsCache.set(filePath, currentStats);
+      }
+
+      // Update counters
+      this.eventCount++;
+      this.lastEvent = enhancedEvent.timestamp;
+
+      // Emit the enhanced event
+      this.emit('change', enhancedEvent);
+
+    } catch (error) {
+      this.emit('error', error instanceof Error ? error : new Error('Unknown error'));
+    }
+  }
+
+  private shouldIncludeFile(filePath: string): boolean {
+    const relativePath = relative(this.path, filePath);
+    const filename = basename(filePath);
+
+    // Check ignore patterns
+    if (this.config.ignorePatterns) {
+      for (const pattern of this.config.ignorePatterns) {
+        if (typeof pattern === 'string') {
+          if (relativePath.includes(pattern) || filename.includes(pattern)) {
+            return false;
+          }
+        } else if (pattern instanceof RegExp) {
+          if (pattern.test(relativePath) || pattern.test(filename)) {
+            return false;
+          }
+        }
+      }
+    }
+
+    // Check include patterns (if specified, file must match at least one)
+    if (this.config.includePatterns && this.config.includePatterns.length > 0) {
+      let matches = false;
+      for (const pattern of this.config.includePatterns) {
+        if (typeof pattern === 'string') {
+          if (relativePath.includes(pattern) || filename.includes(pattern)) {
+            matches = true;
+            break;
+          }
+        } else if (pattern instanceof RegExp) {
+          if (pattern.test(relativePath) || pattern.test(filename)) {
+            matches = true;
+            break;
+          }
+        }
+      }
+      if (!matches) {
+        return false;
+      }
+    }
+
+    // Check max depth
+    if (this.config.maxDepth !== undefined) {
+      const depth = relativePath.split('/').length - 1;
+      if (depth > this.config.maxDepth) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+}
+
+/**
+ * Creates an enhanced directory watcher with advanced filtering and event handling
+ */
+export function createDirectoryWatcher(path: string, config: WatcherConfig = {}): DirectoryWatcher {
+  const id = ++directoryWatcherId;
+  const watcher = new EnhancedDirectoryWatcher(id, path, config);
+  directoryWatchers.set(id, watcher);
+  return watcher;
+}
+
+/**
+ * Removes an enhanced directory watcher
+ */
+export async function removeDirectoryWatcher(watcherId: number): Promise<void> {
+  const watcher = directoryWatchers.get(watcherId);
+  if (!watcher) {
+    throw new Error('Invalid directory watcher ID');
+  }
+
+  await watcher.stop();
+  directoryWatchers.delete(watcherId);
+}
+
+/**
+ * Gets all active directory watchers
+ */
+export function getDirectoryWatchers(): DirectoryWatcher[] {
+  return Array.from(directoryWatchers.values());
+}
+
+/**
+ * Stops all directory watchers
+ */
+export async function stopAllDirectoryWatchers(): Promise<void> {
+  const stopPromises = Array.from(directoryWatchers.values()).map(watcher => watcher.stop());
+  await Promise.all(stopPromises);
+  directoryWatchers.clear();
 }
 
 /**

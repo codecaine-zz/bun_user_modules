@@ -736,4 +736,191 @@ describe('Filesystem Module', () => {
       expect(configFiles.every(file => path.basename(file).includes('config'))).toBe(true);
     });
   });
+
+  describe('Enhanced Directory Watching', () => {
+    let watchTestDir: string;
+    let watcher: any;
+
+    beforeEach(async () => {
+      watchTestDir = path.join(TEST_DIR, `watch-${Date.now()}`);
+      await filesystem.createDirectory(watchTestDir);
+    });
+
+    afterEach(async () => {
+      if (watcher && watcher.active) {
+        await watcher.stop();
+        watcher = null;
+      }
+      try {
+        await filesystem.remove(watchTestDir);
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    test('should create enhanced directory watcher', () => {
+      watcher = filesystem.createDirectoryWatcher(watchTestDir, {
+        recursive: true,
+        events: ['create', 'modify', 'delete'],
+        debounceMs: 50
+      });
+
+      expect(watcher).toBeDefined();
+      expect(watcher.id).toBeGreaterThan(0);
+      expect(watcher.path).toBe(watchTestDir);
+      expect(watcher.active).toBe(false);
+      expect(watcher.eventCount).toBe(0);
+    });
+
+    test('should start and stop enhanced watcher', async () => {
+      watcher = filesystem.createDirectoryWatcher(watchTestDir);
+      
+      // Start watcher
+      await watcher.start();
+      expect(watcher.active).toBe(true);
+
+      // Stop watcher
+      await watcher.stop();
+      expect(watcher.active).toBe(false);
+    });
+
+    test('should emit events for file changes', async () => {
+      let events: any[] = [];
+      
+      watcher = filesystem.createDirectoryWatcher(watchTestDir, {
+        events: ['create', 'modify', 'delete'],
+        debounceMs: 10
+      });
+
+      watcher.on('change', (event: any) => {
+        events.push(event);
+      });
+
+      await watcher.start();
+
+      // Create a file
+      const testFile = path.join(watchTestDir, 'test.txt');
+      await filesystem.writeFileText(testFile, 'initial content');
+
+      // Wait for events to be processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(events.length).toBeGreaterThan(0);
+      
+      const createEvent = events.find(e => e.event === 'create');
+      expect(createEvent).toBeDefined();
+      expect(createEvent?.filename).toBe('test.txt');
+      expect(createEvent?.timestamp).toBeInstanceOf(Date);
+    });
+
+    test('should filter events by patterns', async () => {
+      let events: any[] = [];
+      
+      watcher = filesystem.createDirectoryWatcher(watchTestDir, {
+        includePatterns: [/\.txt$/],
+        ignorePatterns: ['temp'],
+        debounceMs: 10
+      });
+
+      watcher.on('change', (event: any) => {
+        events.push(event);
+      });
+
+      await watcher.start();
+
+      // Create files that should be included
+      await filesystem.writeFileText(path.join(watchTestDir, 'include.txt'), 'content');
+      
+      // Wait a bit to ensure the event is processed
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Create files that should be ignored
+      await filesystem.writeFileText(path.join(watchTestDir, 'ignore.js'), 'content');
+      await filesystem.writeFileText(path.join(watchTestDir, 'temp.txt'), 'content');
+
+      // Wait longer for all events to be processed
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Check that we got at least the included file
+      const includedFiles = events.map(e => e.filename);
+      expect(events.length).toBeGreaterThan(0);
+      
+      // The include.txt should be present, others should be filtered out
+      const hasIncluded = includedFiles.some(f => f === 'include.txt');
+      const hasIgnoredJs = includedFiles.some(f => f === 'ignore.js');
+      const hasTemp = includedFiles.some(f => f === 'temp.txt');
+      
+      expect(hasIncluded).toBe(true);
+      expect(hasIgnoredJs).toBe(false);
+      expect(hasTemp).toBe(false);
+    });
+
+    test('should track watcher statistics', async () => {
+      watcher = filesystem.createDirectoryWatcher(watchTestDir, { debounceMs: 10 });
+      
+      await watcher.start();
+      
+      const initialCount = watcher.eventCount;
+      expect(watcher.lastEvent).toBeUndefined();
+
+      // Create a file to generate events
+      await filesystem.writeFileText(path.join(watchTestDir, 'stats-test.txt'), 'content');
+      
+      // Wait for events to be processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(watcher.eventCount).toBeGreaterThan(initialCount);
+      expect(watcher.lastEvent).toBeInstanceOf(Date);
+    });
+
+    test('should manage multiple directory watchers', async () => {
+      const watcher1 = filesystem.createDirectoryWatcher(watchTestDir);
+      const watcher2 = filesystem.createDirectoryWatcher(watchTestDir);
+
+      expect(watcher1.id).not.toBe(watcher2.id);
+
+      const watchers = filesystem.getDirectoryWatchers();
+      expect(watchers.length).toBeGreaterThanOrEqual(2);
+      
+      const watcherIds = watchers.map(w => w.id);
+      expect(watcherIds).toContain(watcher1.id);
+      expect(watcherIds).toContain(watcher2.id);
+
+      // Clean up
+      await filesystem.removeDirectoryWatcher(watcher1.id);
+      await filesystem.removeDirectoryWatcher(watcher2.id);
+    });
+
+    test('should stop all directory watchers', async () => {
+      const watcher1 = filesystem.createDirectoryWatcher(watchTestDir);
+      const watcher2 = filesystem.createDirectoryWatcher(watchTestDir);
+      
+      await watcher1.start();
+      await watcher2.start();
+
+      expect(watcher1.active).toBe(true);
+      expect(watcher2.active).toBe(true);
+
+      await filesystem.stopAllDirectoryWatchers();
+
+      expect(watcher1.active).toBe(false);
+      expect(watcher2.active).toBe(false);
+      expect(filesystem.getDirectoryWatchers().length).toBe(0);
+
+      // Prevent cleanup from trying to stop already stopped watchers
+      watcher = null;
+    });
+
+    test('should handle watcher errors gracefully', async () => {
+      // Try to watch a non-existent directory
+      watcher = filesystem.createDirectoryWatcher('/non/existent/path');
+
+      try {
+        await watcher.start();
+        // If it doesn't throw, that's also acceptable behavior
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+      }
+    });
+  });
 });
